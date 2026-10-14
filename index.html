@@ -1,0 +1,339 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Database Sponsorship Aresta</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f2f5fa;color:#17243a}
+header{background:linear-gradient(110deg,#20477f,#3478d0);color:white;padding:25px max(20px,calc((100% - 1200px)/2))}
+header h1{font-size:30px;margin:0 0 7px}
+header p{margin:0;font-size:14px}
+main{max-width:1200px;margin:22px auto;padding:0 16px}
+.card{background:white;border:1px solid #dbe3ef;border-radius:16px;padding:22px;box-shadow:0 7px 22px #243b5308}
+h2{font-size:20px;margin:0 0 18px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:17px}
+.stat{background:#f5f8fd;border:1px solid #dbe3ef;border-radius:10px;padding:13px}
+.stat small{display:block;color:#68778d;margin-bottom:6px}
+.stat strong{font-size:24px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}
+input{padding:11px;border:1px solid #ccd5e1;border-radius:9px;font:14px Arial}
+#search{flex:1;min-width:200px}
+button,.link{border:0;border-radius:9px;padding:11px 13px;background:#e9f0fc;color:#234c89;font-size:13px;font-weight:bold;cursor:pointer;text-decoration:none}
+button:hover,.link:hover{opacity:.85}
+.primary{background:#2457a7;color:white}
+.danger{background:#fff0f0;color:#a51d2a}
+.table-wrap{overflow:auto;border:1px solid #dbe3ef;border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:1050px;font-size:13px}
+th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #dbe3ef;vertical-align:top}
+th{background:#f5f8fd;color:#45556e}
+tr:last-child td{border-bottom:0}
+.empty{text-align:center;padding:28px;color:#68778d}
+.muted{font-size:12px;line-height:1.5;color:#68778d}
+.actions{display:flex;gap:5px}
+.actions button{padding:7px 9px}
+@media(max-width:600px){header h1{font-size:24px}.stats{grid-template-columns:1fr}.card{padding:15px}}
+@media print{
+ header,.toolbar,.actions,.no-print{display:none!important}
+ body{background:white}
+ main{margin:0;padding:0;max-width:none}
+ .card{border:0;box-shadow:none;padding:0}
+ table{min-width:0;font-size:9px}
+ th,td{padding:6px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Database Sponsorship ARESTA</h1>
+  <p>Daftar data sponsor yang sudah dimasukkan.</p>
+</header>
+
+<main>
+<section class="card">
+  <h2>Database Input</h2>
+
+  <div class="stats">
+    <div class="stat">
+      <small>Total data tersimpan</small>
+      <strong id="total">0</strong>
+    </div>
+    <div class="stat">
+      <small>Hasil pencarian</small>
+      <strong id="jumlahHasil">0</strong>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input id="search" placeholder="Cari nama, perusahaan, nomor, kategori...">
+    <button id="exportCsv">Ekspor CSV</button>
+    <button id="backup">Cadangkan JSON</button>
+    <button id="importBtn">Impor JSON</button>
+    <button id="printBtn">Cetak Laporan</button>
+    <input id="jsonFile" type="file" accept=".json,application/json" hidden>
+  </div>
+
+  <p class="muted">
+    Gunakan Edit untuk memperbarui data. Gunakan Hapus untuk menghapus data.
+    Simpan cadangan JSON secara berkala agar data tidak hilang.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>No.</th>
+          <th>Nama / Jabatan</th>
+          <th>Perusahaan</th>
+          <th>Kontak</th>
+          <th>Dana Sponsorship</th>
+          <th>Alamat / Catatan</th>
+          <th>Tanggal Input</th>
+          <th class="no-print">Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="empty" class="empty">Belum ada data sponsorship.</div>
+  </div>
+</section>
+</main>
+
+<script>
+const STORAGE_KEY = "aresta_sponsorship_database_v1";
+const $ = id => document.getElementById(id);
+let records = [];
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;"
+  })[char]);
+}
+
+function formatRupiah(value) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0
+  }).format(Number(value) || 0);
+}
+
+function loadData() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    records = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    records = [];
+  }
+}
+
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  render();
+}
+
+function render() {
+  const keyword = $("search").value.toLowerCase().trim();
+
+  const filtered = records.filter(row =>
+    Object.values(row).join(" ").toLowerCase().includes(keyword)
+  );
+
+  $("total").textContent = records.length;
+  $("jumlahHasil").textContent = filtered.length;
+
+  $("tableBody").innerHTML = filtered.map((row, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>
+        <strong>${escapeHTML(row.nama)}</strong><br>
+        ${escapeHTML(row.jabatan || "-")}<br>
+        <span class="muted">${escapeHTML(row.jk || "")}</span>
+      </td>
+      <td>${escapeHTML(row.perusahaan || "-")}</td>
+      <td>
+        ${escapeHTML(row.telepon || "-")}<br>
+        ${escapeHTML(row.email || "")}
+      </td>
+      <td>${escapeHTML(formatRupiah(row.dana))}</td>
+      <td>
+        ${escapeHTML(row.alamat || "-")}<br>
+        <span class="muted">${escapeHTML(row.catatan || "")}</span>
+      </td>
+      <td>${escapeHTML(row.dibuat ?
+        new Date(row.dibuat).toLocaleString("id-ID") : "-")}</td>
+      <td class="no-print">
+        <div class="actions">
+          <button data-edit="${escapeHTML(row.id)}">Edit</button>
+          <button class="danger" data-delete="${escapeHTML(row.id)}">Hapus</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+
+  $("empty").style.display = filtered.length ? "none" : "block";
+
+  document.querySelectorAll("[data-edit]").forEach(button => {
+    button.onclick = () => editRecord(button.dataset.edit);
+  });
+
+  document.querySelectorAll("[data-delete]").forEach(button => {
+    button.onclick = () => deleteRecord(button.dataset.delete);
+  });
+}
+
+function editRecord(id) {
+  const row = records.find(item => item.id === id);
+  if (!row) return;
+
+  const fields = [
+    ["nama", "Nama lengkap"],
+    ["jabatan", "Jabatan"],
+    ["jk", "Jenis kelamin"],
+    ["telepon", "Nomor telepon"],
+    ["email", "Email"],
+    ["alamat", "Alamat perusahaan"],
+    ["dana", "Total dana sponsorship"],
+    ["perusahaan", "Nama perusahaan"],
+    ["catatan", "Catatan"]
+  ];
+
+  const updated = {...row};
+
+  for (const [key, label] of fields) {
+    const answer = prompt("Edit " + label + ":", updated[key] ?? "");
+    if (answer === null) return;
+
+    if (key === "dana") {
+      if (answer.trim() !== "" &&
+          (!Number.isFinite(Number(answer)) || Number(answer) < 0)) {
+        alert("Dana harus berupa angka nol atau lebih.");
+        return;
+      }
+      updated[key] = Number(answer || 0);
+    } else {
+      updated[key] = answer.trim();
+    }
+  }
+
+  if (!updated.nama) {
+    alert("Nama lengkap tidak boleh kosong.");
+    return;
+  }
+
+  records = records.map(item => item.id === id ? updated : item);
+  saveData();
+}
+
+function deleteRecord(id) {
+  const row = records.find(item => item.id === id);
+  if (!row) return;
+
+  if (confirm("Yakin ingin menghapus data " + row.nama + "?")) {
+    records = records.filter(item => item.id !== id);
+    saveData();
+  }
+}
+
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+$("search").addEventListener("input", render);
+
+$("exportCsv").onclick = () => {
+  const columns = [
+    "nama", "jabatan", "jk", "telepon", "email",
+    "alamat", "dana", "perusahaan", "catatan", "dibuat"
+  ];
+
+  const cell = value =>
+    '"' + String(value ?? "").replace(/"/g, '""') + '"';
+
+  const csv = [
+    columns.map(cell).join(","),
+    ...records.map(row =>
+      columns.map(key => cell(row[key])).join(",")
+    )
+  ].join("\r\n");
+
+  downloadFile(
+    "data_sponsorship_aresta.csv",
+    "\uFEFF" + csv,
+    "text/csv;charset=utf-8"
+  );
+};
+
+$("backup").onclick = () => {
+  downloadFile(
+    "backup_sponsorship_aresta.json",
+    JSON.stringify(records, null, 2),
+    "application/json"
+  );
+};
+
+$("importBtn").onclick = () => $("jsonFile").click();
+
+$("jsonFile").addEventListener("change", async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  try {
+    const imported = JSON.parse(await file.text());
+
+    if (!Array.isArray(imported) ||
+        !imported.every(row =>
+          row && typeof row === "object" &&
+          typeof row.nama === "string"
+        )) {
+      throw new Error("Format file bukan cadangan sponsorship yang valid.");
+    }
+
+    if (confirm("Impor " + imported.length +
+                " data dan gabungkan dengan database sekarang?")) {
+      const existingIds = new Set(records.map(row => row.id));
+
+      const normalized = imported.map(row => {
+        let id = row.id;
+        if (!id || existingIds.has(id)) {
+          id = (crypto.randomUUID ?
+            crypto.randomUUID() : Date.now() + "-" + Math.random());
+        }
+        existingIds.add(id);
+        return {...row, id};
+      });
+
+      records = [...normalized, ...records];
+      saveData();
+      alert("Impor data selesai.");
+    }
+  } catch (error) {
+    alert("Gagal mengimpor: " + error.message);
+  }
+
+  event.target.value = "";
+});
+
+$("printBtn").onclick = () => window.print();
+
+window.addEventListener("storage", event => {
+  if (event.key === STORAGE_KEY) {
+    loadData();
+    render();
+  }
+});
+
+loadData();
+render();
+</script>
+</body>
+</html>
